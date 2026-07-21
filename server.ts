@@ -109,10 +109,14 @@ app.post("/api/tts/gemini", async (req, res) => {
     // Build guidance instructions for the model to speak with the specified tone and style
     const toneDescription: string[] = [];
     if (tone) {
-      if (tone.cheerful) toneDescription.push("cheerful, happy and warm");
-      if (tone.formal) toneDescription.push("professional, formal, articulate and serious");
-      if (tone.dramatic) toneDescription.push("highly expressive, dramatic and theatrical");
-      if (tone.robotic) toneDescription.push("flat, robotic, computerized and mechanical");
+      if (tone.cheerful) toneDescription.push("cheerful, happy, energetic, and warm");
+      if (tone.formal) toneDescription.push("professional, formal, articulate, clear, and serious");
+      if (tone.dramatic) toneDescription.push("highly expressive, dramatic, emotional, and theatrical");
+      if (tone.discourse) toneDescription.push("deeply meditative, hypnotic, emotionally resonant, saint-like, and peaceful");
+      if (tone.maleKid) toneDescription.push("playful, energetic, high-pitched male kid, fast/bubbly pace, and light resonance");
+      if (tone.femaleKid) toneDescription.push("sweet, gentle, melodic, very high-pitched female kid, and storytelling-like");
+      if (tone.adultMale) toneDescription.push("low pitch, deep baritone, warm, grounded chest resonance, and steady authoritative");
+      if (tone.adultFemale) toneDescription.push("medium-high pitch, crisp, articulate, head/mask resonance, and smooth conversational");
     }
     const toneGuide = toneDescription.length > 0 
       ? `Speak in a ${toneDescription.join(" and ")} manner.` 
@@ -121,8 +125,42 @@ app.post("/api/tts/gemini", async (req, res) => {
     let voiceInstruction = "";
     let baseVoice = voice || "Kore";
 
-    // Support Indian Hindi speakers
-    if (language === "hi") {
+    if (tone && tone.discourse) {
+      baseVoice = "Fenrir"; // Force Male voice for discourse gravity
+      if (language === "hi") {
+        voiceInstruction = "Read the following Hindi text in a deeply meditative, slow meditative pace of 110-130 WPM, with lower-than-average pitch, deep/warm chest resonance, extended micro-pauses, elongated vowel endings, and flat hypnotic intonation. Hindi must use soft dental consonants and sound profoundly serene.";
+      } else {
+        voiceInstruction = "Read the following English text. Use a warm, neutral Indian English accent that conveys ancient wisdom, spiritual authority, and absolute calm. Speak slowly at a meditative pace of 110-130 WPM, with a lower-than-average pitch, deep/warm chest resonance, extended micro-pauses, elongated vowel endings, and flat hypnotic intonation.";
+      }
+    } else if (tone && tone.maleKid) {
+      baseVoice = "Puck"; // Playful kid voice
+      if (language === "hi") {
+        voiceInstruction = "Read the following Hindi text in a high pitch, energetic, playful Male Kid voice with a slight lisp or soft consonants, fast/bubbly pace, light resonance, and native casual inflections.";
+      } else {
+        voiceInstruction = "Read the following English text in a high pitch, energetic, playful Male Kid voice with a slight lisp or soft consonants, fast/bubbly pace, and light resonance. Sound clear and enthusiastic.";
+      }
+    } else if (tone && tone.femaleKid) {
+      baseVoice = "Kore"; // Sweet female/child voice
+      if (language === "hi") {
+        voiceInstruction = "Read the following Hindi text in a very high pitch, sweet, gentle, melodic, soft breathy quality, rhythmic pace, and a soft, polite tone.";
+      } else {
+        voiceInstruction = "Read the following English text in a very high pitch, sweet, gentle, melodic, soft breathy quality, rhythmic pace. Sound clear, expressive, and storytelling-like.";
+      }
+    } else if (tone && tone.adultMale) {
+      baseVoice = "Fenrir"; // Deep male baritone
+      if (language === "hi") {
+        voiceInstruction = "Read the following Hindi text in a low pitch, deep baritone, warm, grounded chest resonance, and steady authoritative pace. Sound neutral and respectful (formal standard).";
+      } else {
+        voiceInstruction = "Read the following English text in a professional, clear, low pitch, deep baritone, warm, grounded chest resonance, and steady authoritative pace.";
+      }
+    } else if (tone && tone.adultFemale) {
+      baseVoice = "Kore"; // Clear female voice
+      if (language === "hi") {
+        voiceInstruction = "Read the following Hindi text in a medium-high pitch, crisp, articulate, head/mask resonance, smooth conversational pace, and sound empathetic and soft-spoken.";
+      } else {
+        voiceInstruction = "Read the following English text in a professional, confident, warm, medium-high pitch, crisp, articulate, head/mask resonance, and smooth conversational pace.";
+      }
+    } else if (language === "hi") {
       if (voice === "hindi-male") {
         voiceInstruction = "Read the following Hindi text in a clear, native Indian Male signature speaker voice with an Indian accent.";
         baseVoice = "Fenrir"; // Base voice for male
@@ -139,34 +177,65 @@ app.post("/api/tts/gemini", async (req, res) => {
     // Combine tone guide and voice instructions
     const prompt = `${voiceInstruction} ${toneGuide}\n\nText:\n${text}`;
 
-    // Call Gemini 3.1 flash tts model
-    const response = await ai.models.generateContent({
-      model: "gemini-3.1-flash-tts-preview",
-      contents: [{ parts: [{ text: prompt }] }],
-      config: {
-        responseModalities: ["AUDIO"],
-        speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: baseVoice },
+    let base64Audio: string | undefined;
+    let fallbackUsed = false;
+    let mimeType = "audio/wav";
+    let wavBuffer: Buffer | null = null;
+    let mp3Buffer: Buffer | null = null;
+
+    try {
+      // Call Gemini 3.1 flash tts model
+      const response = await ai.models.generateContent({
+        model: "gemini-3.1-flash-tts-preview",
+        contents: [{ parts: [{ text: prompt }] }],
+        config: {
+          responseModalities: ["AUDIO"],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: { voiceName: baseVoice },
+            },
           },
         },
-      },
-    });
+      });
 
-    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-    if (!base64Audio) {
-      console.error("No audio returned from Gemini", JSON.stringify(response));
-      return res.status(500).json({ error: "Gemini TTS did not return any audio data. Ensure your text and settings are valid." });
+      base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      if (!base64Audio) {
+        throw new Error("No audio payload returned from Gemini model.");
+      }
+
+      // Convert raw PCM bytes to WAV
+      const pcmBuffer = Buffer.from(base64Audio, "base64");
+      wavBuffer = convertPcmToWav(pcmBuffer, 24000);
+    } catch (geminiError: any) {
+      console.warn("Gemini TTS API failed or quota exceeded. Falling back to local high-fidelity TTS proxy.", geminiError.message || geminiError);
+      fallbackUsed = true;
+      mimeType = "audio/mpeg";
+      try {
+        const langCode = language === "hi" ? "hi" : "en";
+        mp3Buffer = await getGoogleTTSMp3(text, langCode);
+      } catch (localTtsError: any) {
+        console.error("Local high-fidelity fallback also failed:", localTtsError);
+        return res.status(500).json({
+          error: `Both Gemini TTS and local fallback failed. Gemini Error: ${geminiError.message || "Unknown"}`
+        });
+      }
     }
 
-    // Convert raw PCM bytes to WAV
-    const pcmBuffer = Buffer.from(base64Audio, "base64");
-    const wavBuffer = convertPcmToWav(pcmBuffer, 24000);
-
-    res.json({
-      audioBase64: wavBuffer.toString("base64"),
-      mimeType: "audio/wav"
-    });
+    if (fallbackUsed && mp3Buffer) {
+      res.json({
+        audioBase64: mp3Buffer.toString("base64"),
+        mimeType: "audio/mpeg",
+        fallback: true,
+        warning: "Gemini TTS quota exceeded. Seamlessly playing high-fidelity fallback audio instead."
+      });
+    } else if (wavBuffer) {
+      res.json({
+        audioBase64: wavBuffer.toString("base64"),
+        mimeType: "audio/wav"
+      });
+    } else {
+      res.status(500).json({ error: "Failed to generate speech audio." });
+    }
   } catch (error: any) {
     console.error("Gemini TTS Error:", error);
     res.status(500).json({ error: error.message || "An unexpected error occurred during speech synthesis" });
@@ -176,12 +245,21 @@ app.post("/api/tts/gemini", async (req, res) => {
 // Browser Local audio download proxy route
 app.post("/api/tts/local", async (req, res) => {
   try {
-    const { text, language } = req.body;
+    const { text, language, tone } = req.body;
     if (!text) {
       return res.status(400).json({ error: "Text is required" });
     }
 
-    const langCode = language || "en";
+    // For Local Browser Voices / Download Fallback:
+    // If English and Discourse (or any tone), we can use "en-in" (Indian English) to satisfy "English should use a warm, neutral Indian English accent"
+    // Otherwise standard "en" is used.
+    let langCode = "en";
+    if (language === "hi") {
+      langCode = "hi";
+    } else if (tone && (tone.discourse || tone.maleKid || tone.femaleKid || tone.adultMale || tone.adultFemale)) {
+      langCode = "en-in";
+    }
+
     const mp3Buffer = await getGoogleTTSMp3(text, langCode);
 
     res.setHeader("Content-Type", "audio/mpeg");
