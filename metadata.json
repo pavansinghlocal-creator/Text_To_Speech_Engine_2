@@ -1,0 +1,6 @@
+{
+  "name": "Text to Speech Generator",
+  "description": "A sophisticated full-featured text-to-speech application supporting both local browser engines and Gemini AI Studio generation with customized controls.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
