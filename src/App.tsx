@@ -281,6 +281,7 @@ export default function App() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const animationRef = useRef<number | null>(null);
+  const synthesisIdRef = useRef<number>(0);
 
   const formatTime = (time: number) => {
     if (isNaN(time)) return "00:00";
@@ -372,47 +373,89 @@ export default function App() {
 
     let width = canvas.width = canvas.parentElement?.clientWidth || 400;
     let height = canvas.height = 60;
-    
-    const barsCount = 36;
-    const barWidth = Math.floor(width / barsCount) - 3;
-    const barHeights = Array(barsCount).fill(4);
+
+    // Define 5 thick waves with different characteristics (frequency, speed, amplitude, phases, colors)
+    const waves = [
+      {
+        color: "rgba(59, 130, 246, 0.85)",  // Blue
+        frequency: 0.015,
+        speed: 0.012,
+        amplitude: 18,
+        phaseShift: 0,
+        lineWidth: 3.5
+      },
+      {
+        color: "rgba(234, 179, 8, 0.85)",   // Yellow
+        frequency: 0.024,
+        speed: -0.010,
+        amplitude: 14,
+        phaseShift: Math.PI / 4,
+        lineWidth: 3.5
+      },
+      {
+        color: "rgba(168, 85, 247, 0.85)",  // Purple
+        frequency: 0.011,
+        speed: 0.015,
+        amplitude: 22,
+        phaseShift: Math.PI / 2,
+        lineWidth: 3.5
+      },
+      {
+        color: "rgba(249, 115, 22, 0.85)",   // Orange
+        frequency: 0.028,
+        speed: -0.013,
+        amplitude: 12,
+        phaseShift: (Math.PI * 3) / 4,
+        lineWidth: 3.5
+      },
+      {
+        color: "rgba(34, 197, 94, 0.85)",   // Green
+        frequency: 0.018,
+        speed: 0.008,
+        amplitude: 16,
+        phaseShift: Math.PI,
+        lineWidth: 3.5
+      }
+    ];
 
     const animate = () => {
       ctx.clearRect(0, 0, width, height);
-      
-      // Draw ambient backdrop glow
-      const gradientBg = ctx.createLinearGradient(0, 0, width, 0);
-      gradientBg.addColorStop(0, "rgba(37, 99, 235, 0.05)");
-      gradientBg.addColorStop(0.5, "rgba(139, 92, 246, 0.08)");
-      gradientBg.addColorStop(1, "rgba(37, 99, 235, 0.05)");
-      ctx.fillStyle = gradientBg;
+
+      // Deep dark canvas background
+      ctx.fillStyle = "#0F0F0F";
       ctx.fillRect(0, 0, width, height);
 
-      // Draw stylized animated bars
-      for (let i = 0; i < barsCount; i++) {
-        // Generate pseudo random waves depending on state
-        const multiplier = playing ? Math.sin(Date.now() * 0.005 + i * 0.3) * 0.5 + 0.5 : 0.05;
-        const targetHeight = 4 + multiplier * (height - 12);
-        
-        // Linear interpolation for smooth transitions
-        barHeights[i] += (targetHeight - barHeights[i]) * 0.2;
+      const centerY = height / 2;
 
-        const x = i * (barWidth + 3);
-        const y = (height - barHeights[i]) / 2;
-
-        // Multicolored bar gradients (Blue -> Purple)
-        const percent = i / barsCount;
-        let color = "rgba(37, 99, 235, 0.8)"; // Blue
-        if (percent > 0.5) {
-          color = "rgba(139, 92, 246, 0.9)"; // Purple
-        }
-
-        ctx.fillStyle = color;
-        // Rounded rectangles
+      waves.forEach((w) => {
         ctx.beginPath();
-        ctx.roundRect?.(x, y, barWidth, barHeights[i], 3);
-        ctx.fill();
-      }
+        ctx.strokeStyle = w.color;
+        ctx.lineWidth = w.lineWidth;
+        ctx.lineCap = "round";
+
+        for (let x = 0; x < width; x += 1.5) {
+          const time = Date.now();
+          
+          // Current phase position
+          const phase = time * w.speed + w.phaseShift;
+          
+          // Symmetrical sine-based envelope: peaks in center, tapers smoothly at edges
+          const envelope = Math.sin((x / width) * Math.PI);
+          
+          // Organic motion scale
+          const modulation = Math.sin(time * 0.003 + x * 0.004) * 0.35 + 0.65;
+
+          // Sine wave formula
+          const y = centerY + Math.sin(x * w.frequency + phase) * w.amplitude * envelope * modulation;
+
+          if (x === 0) {
+            ctx.moveTo(x, y);
+          } else {
+            ctx.lineTo(x, y);
+          }
+        }
+        ctx.stroke();
+      });
 
       animationRef.current = requestAnimationFrame(animate);
     };
@@ -425,7 +468,6 @@ export default function App() {
       cancelAnimationFrame(animationRef.current);
       animationRef.current = null;
     }
-    // Render static resting wave
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -434,124 +476,142 @@ export default function App() {
     const height = canvas.height = 60;
     ctx.clearRect(0, 0, width, height);
 
-    const barsCount = 36;
-    const barWidth = Math.floor(width / barsCount) - 3;
-    
-    for (let i = 0; i < barsCount; i++) {
-      const x = i * (barWidth + 3);
-      const y = (height - 6) / 2;
-      ctx.fillStyle = "rgba(51, 51, 51, 0.6)"; // Dark gray/border color
+    ctx.fillStyle = "#0F0F0F";
+    ctx.fillRect(0, 0, width, height);
+
+    const centerY = height / 2;
+
+    const colors = [
+      "rgba(59, 130, 246, 0.5)",  // Blue
+      "rgba(234, 179, 8, 0.5)",   // Yellow
+      "rgba(168, 85, 247, 0.5)",  // Purple
+      "rgba(249, 115, 22, 0.5)",   // Orange
+      "rgba(34, 197, 94, 0.5)"    // Green
+    ];
+
+    // Render the resting state as 5 elegant parallel multi-color lines (dormant spectrum ribbons)
+    colors.forEach((color, idx) => {
       ctx.beginPath();
-      ctx.roundRect?.(x, y, barWidth, 6, 2);
-      ctx.fill();
-    }
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = "round";
+      
+      const yOffset = (idx - 2) * 2; // Stacked slightly
+      ctx.moveTo(12, centerY + yOffset);
+      ctx.lineTo(width - 12, centerY + yOffset);
+      ctx.stroke();
+    });
   };
 
   // Toggle Tone modifiers (Single selection, mutually exclusive behavior)
   const toggleTone = (key: keyof ToneSettings) => {
-    setTone(prev => {
-      const isCurrentlyActive = prev[key];
-      const newTone = {
-        cheerful: false,
-        formal: false,
-        dramatic: false,
-        discourse: false,
-        maleKid: false,
-        femaleKid: false,
-        adultMale: false,
-        adultFemale: false
-      };
-      if (!isCurrentlyActive) {
-        newTone[key] = true;
-        
-        const setLocalVoiceByLangAndGender = (langPrefix: string, gender: "male" | "female" | "kid") => {
-          const matchingVoices = localVoices.filter(v => v.lang.toLowerCase().startsWith(langPrefix.toLowerCase()));
-          if (matchingVoices.length > 0) {
-            const genderVoice = matchingVoices.find(v => {
-              const nameLower = v.name.toLowerCase();
-              if (gender === "male") {
-                return nameLower.includes("male") || nameLower.includes("david") || nameLower.includes("george") || nameLower.includes("ravi") || nameLower.includes("microsoft") || nameLower.includes("standard-b");
-              } else if (gender === "female") {
-                return nameLower.includes("female") || nameLower.includes("zira") || nameLower.includes("hazel") || nameLower.includes("heera") || nameLower.includes("google") || nameLower.includes("standard-a");
-              } else {
-                return nameLower.includes("kid") || nameLower.includes("child") || nameLower.includes("toy") || nameLower.includes("google");
-              }
-            });
-            if (genderVoice) {
-              setLocalVoiceName(genderVoice.name);
-            } else {
-              setLocalVoiceName(matchingVoices[0].name);
-            }
-          }
-        };
+    const isCurrentlyActive = tone[key];
+    const newTone = {
+      cheerful: false,
+      formal: false,
+      dramatic: false,
+      discourse: false,
+      maleKid: false,
+      femaleKid: false,
+      adultMale: false,
+      adultFemale: false
+    };
 
-        if (key === "discourse") {
-          if (language === "hi") {
-            setGeminiVoice("hindi-male");
-            setLocalVoiceByLangAndGender("hi", "male");
+    if (!isCurrentlyActive) {
+      newTone[key] = true;
+    }
+
+    // Set the state directly
+    setTone(newTone);
+
+    // Run side-effects safely outside of state transaction to avoid race conditions or batched state dropouts
+    if (!isCurrentlyActive) {
+      const setLocalVoiceByLangAndGender = (langPrefix: string, gender: "male" | "female" | "kid") => {
+        const matchingVoices = localVoices.filter(v => v.lang.toLowerCase().startsWith(langPrefix.toLowerCase()));
+        if (matchingVoices.length > 0) {
+          const genderVoice = matchingVoices.find(v => {
+            const nameLower = v.name.toLowerCase();
+            if (gender === "male") {
+              return nameLower.includes("male") || nameLower.includes("david") || nameLower.includes("george") || nameLower.includes("ravi") || nameLower.includes("microsoft") || nameLower.includes("standard-b");
+            } else if (gender === "female") {
+              return nameLower.includes("female") || nameLower.includes("zira") || nameLower.includes("hazel") || nameLower.includes("heera") || nameLower.includes("google") || nameLower.includes("standard-a");
+            } else {
+              return nameLower.includes("kid") || nameLower.includes("child") || nameLower.includes("toy") || nameLower.includes("google");
+            }
+          });
+          if (genderVoice) {
+            setLocalVoiceName(genderVoice.name);
           } else {
-            setGeminiVoice("Fenrir");
-            setLocalVoiceByLangAndGender("en", "male");
+            setLocalVoiceName(matchingVoices[0].name);
           }
-          setVocalVelocity(0.75); // meditative pace 110-130 WPM
-          setVocalPitch(0.8);     // lower-than-average pitch
-        } else if (key === "cheerful") {
-          setVocalVelocity(1.15);
-          setVocalPitch(1.15);
-        } else if (key === "formal") {
-          setVocalVelocity(1.0);
-          setVocalPitch(1.0);
-        } else if (key === "dramatic") {
-          setVocalVelocity(0.9);
-          setVocalPitch(1.05);
-        } else if (key === "maleKid") {
-          if (language === "hi") {
-            setGeminiVoice("hindi-male");
-            setLocalVoiceByLangAndGender("hi", "kid");
-          } else {
-            setGeminiVoice("Puck");
-            setLocalVoiceByLangAndGender("en", "kid");
-          }
-          setVocalVelocity(1.2);
-          setVocalPitch(1.4);
-        } else if (key === "femaleKid") {
-          if (language === "hi") {
-            setGeminiVoice("hindi-female");
-            setLocalVoiceByLangAndGender("hi", "kid");
-          } else {
-            setGeminiVoice("Kore");
-            setLocalVoiceByLangAndGender("en", "kid");
-          }
-          setVocalVelocity(1.1);
-          setVocalPitch(1.5);
-        } else if (key === "adultMale") {
-          if (language === "hi") {
-            setGeminiVoice("hindi-male");
-            setLocalVoiceByLangAndGender("hi", "male");
-          } else {
-            setGeminiVoice("Fenrir");
-            setLocalVoiceByLangAndGender("en", "male");
-          }
-          setVocalVelocity(0.95);
-          setVocalPitch(0.85);
-        } else if (key === "adultFemale") {
-          if (language === "hi") {
-            setGeminiVoice("hindi-female");
-            setLocalVoiceByLangAndGender("hi", "female");
-          } else {
-            setGeminiVoice("Kore");
-            setLocalVoiceByLangAndGender("en", "female");
-          }
-          setVocalVelocity(1.05);
-          setVocalPitch(1.15);
         }
-      } else {
-        // Toggled off - reset sliders to default
+      };
+
+      if (key === "discourse") {
+        if (language === "hi") {
+          setGeminiVoice("hindi-male");
+          setLocalVoiceByLangAndGender("hi", "male");
+        } else {
+          setGeminiVoice("Fenrir");
+          setLocalVoiceByLangAndGender("en", "male");
+        }
+        setVocalVelocity(0.75); // meditative pace 110-130 WPM
+        setVocalPitch(0.8);     // lower-than-average pitch
+      } else if (key === "cheerful") {
+        setVocalVelocity(1.15);
+        setVocalPitch(1.15);
+      } else if (key === "formal") {
         setVocalVelocity(1.0);
         setVocalPitch(1.0);
+      } else if (key === "dramatic") {
+        setVocalVelocity(0.9);
+        setVocalPitch(1.05);
+      } else if (key === "maleKid") {
+        if (language === "hi") {
+          setGeminiVoice("hindi-male");
+          setLocalVoiceByLangAndGender("hi", "kid");
+        } else {
+          setGeminiVoice("Puck");
+          setLocalVoiceByLangAndGender("en", "kid");
+        }
+        setVocalVelocity(1.2);
+        setVocalPitch(1.4);
+      } else if (key === "femaleKid") {
+        if (language === "hi") {
+          setGeminiVoice("hindi-female");
+          setLocalVoiceByLangAndGender("hi", "kid");
+        } else {
+          setGeminiVoice("Kore");
+          setLocalVoiceByLangAndGender("en", "kid");
+        }
+        setVocalVelocity(1.1);
+        setVocalPitch(1.5);
+      } else if (key === "adultMale") {
+        if (language === "hi") {
+          setGeminiVoice("hindi-male");
+          setLocalVoiceByLangAndGender("hi", "male");
+        } else {
+          setGeminiVoice("Fenrir");
+          setLocalVoiceByLangAndGender("en", "male");
+        }
+        setVocalVelocity(0.95);
+        setVocalPitch(0.85);
+      } else if (key === "adultFemale") {
+        if (language === "hi") {
+          setGeminiVoice("hindi-female");
+          setLocalVoiceByLangAndGender("hi", "female");
+        } else {
+          setGeminiVoice("Kore");
+          setLocalVoiceByLangAndGender("en", "female");
+        }
+        setVocalVelocity(1.05);
+        setVocalPitch(1.15);
       }
-      return newTone;
-    });
+    } else {
+      // Toggled off - reset sliders to default
+      setVocalVelocity(1.0);
+      setVocalPitch(1.0);
+    }
   };
 
   // Clear Textarea input
@@ -589,21 +649,20 @@ export default function App() {
     }
 
     // Stop any current playing audio
-    if (playing) {
-      handleStopSpeech();
-      // wait a tiny bit to avoid overlap
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
+    handleStopSpeech();
+    // wait a tiny bit to avoid overlap
+    await new Promise(resolve => setTimeout(resolve, 100));
 
     if (engine === "gemini") {
       await speakViaGemini();
     } else {
-      speakViaBrowser();
+      await speakViaBrowser();
     }
   };
 
   // Stop Synthesis
   const handleStopSpeech = () => {
+    synthesisIdRef.current += 1; // Invalidate any running synthesis
     if (typeof window !== "undefined" && window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
@@ -616,6 +675,9 @@ export default function App() {
 
   // 1. Speak Via Gemini AI Studio (Server API Endpoint)
   const speakViaGemini = async () => {
+    synthesisIdRef.current += 1;
+    const currentId = synthesisIdRef.current;
+
     setLoading(true);
     setAudioUrl(null);
     try {
@@ -638,6 +700,8 @@ export default function App() {
         throw new Error(data.error || "Failed to generate speech using Gemini engine");
       }
 
+      if (currentId !== synthesisIdRef.current) return;
+
       if (data.audioBase64) {
         // Convert base64 back to Blob URL for native playing
         const binaryString = window.atob(data.audioBase64);
@@ -658,13 +722,18 @@ export default function App() {
 
         // Auto play
         setTimeout(() => {
+          if (currentId !== synthesisIdRef.current) return;
           if (audioRef.current) {
             audioRef.current.src = url;
             audioRef.current.playbackRate = vocalVelocity;
             audioRef.current.volume = Math.max(0, Math.min(1, audioGain));
             audioRef.current.play()
-              .then(() => setPlaying(true))
+              .then(() => {
+                if (currentId !== synthesisIdRef.current) return;
+                setPlaying(true);
+              })
               .catch(err => {
+                if (currentId !== synthesisIdRef.current) return;
                 console.warn("Playback error", err);
                 setError("Audio file loaded successfully, but browser blocked autoplay. Press play below to listen.");
               });
@@ -674,10 +743,13 @@ export default function App() {
         throw new Error("No audio payload returned from Gemini server.");
       }
     } catch (err: any) {
+      if (currentId !== synthesisIdRef.current) return;
       console.warn("Gemini synthesis error:", err);
       setError(err.message || "An unexpected error occurred while communicating with Gemini server.");
     } finally {
-      setLoading(false);
+      if (currentId === synthesisIdRef.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -686,6 +758,9 @@ export default function App() {
     if (typeof window !== "undefined" && window.speechSynthesis) {
       try {
         window.speechSynthesis.cancel();
+
+        synthesisIdRef.current += 1;
+        const currentId = synthesisIdRef.current;
         
         const utterance = new SpeechSynthesisUtterance(text);
         
@@ -702,30 +777,44 @@ export default function App() {
         utterance.volume = Math.max(0, Math.min(1, audioGain)); // Volume 0 to 1
         
         utterance.onstart = () => {
+          if (currentId !== synthesisIdRef.current) return;
           setPlaying(true);
           setError(null);
         };
         utterance.onend = () => {
+          if (currentId !== synthesisIdRef.current) return;
           setPlaying(false);
         };
         utterance.onerror = (e) => {
-          // If native synthesis fails or is blocked, seamlessly fall back to local proxy
+          if (currentId !== synthesisIdRef.current) return;
+          // If native synthesis is cancelled/interrupted, do not trigger server fallback
+          if (e.error === "interrupted" || e.error === "canceled") {
+            setPlaying(false);
+            return;
+          }
           console.warn("SpeechSynthesis error, falling back to local proxy", e);
-          speakViaLocalProxy();
+          speakViaLocalProxy(currentId);
         };
 
         window.speechSynthesis.speak(utterance);
       } catch (err) {
         console.warn("Failed to initiate native SpeechSynthesis, falling back to server local proxy", err);
-        await speakViaLocalProxy();
+        synthesisIdRef.current += 1;
+        await speakViaLocalProxy(synthesisIdRef.current);
       }
     } else {
-      await speakViaLocalProxy();
+      synthesisIdRef.current += 1;
+      await speakViaLocalProxy(synthesisIdRef.current);
     }
   };
 
   // 2b. Fallback: Speak via server local TTS proxy if browser synthesis fails
-  const speakViaLocalProxy = async () => {
+  const speakViaLocalProxy = async (passedId?: number) => {
+    const currentId = passedId !== undefined ? passedId : (() => {
+      synthesisIdRef.current += 1;
+      return synthesisIdRef.current;
+    })();
+
     setLoading(true);
     setError(null);
     try {
@@ -748,22 +837,29 @@ export default function App() {
         throw new Error(data.error || "Failed to synthesize local fallback audio from server.");
       }
 
+      if (currentId !== synthesisIdRef.current) return;
+
       const blob = await res.blob();
+      if (currentId !== synthesisIdRef.current) return;
+
       const url = URL.createObjectURL(blob);
       setAudioUrl(url);
 
       setTimeout(() => {
+        if (currentId !== synthesisIdRef.current) return;
         if (audioRef.current) {
           audioRef.current.src = url;
           audioRef.current.playbackRate = vocalVelocity;
           audioRef.current.volume = Math.max(0, Math.min(1, audioGain));
           audioRef.current.play()
             .then(() => {
+              if (currentId !== synthesisIdRef.current) return;
               setPlaying(true);
               setLoading(false);
               setSuccessMsg("Switched to high-fidelity server TTS fallback successfully!");
             })
             .catch(err => {
+              if (currentId !== synthesisIdRef.current) return;
               console.warn("Playback error", err);
               setError("Audio synthesized successfully via server fallback, but browser blocked autoplay. Press play below to listen.");
               setLoading(false);
@@ -771,6 +867,7 @@ export default function App() {
         }
       }, 150);
     } catch (err: any) {
+      if (currentId !== synthesisIdRef.current) return;
       console.warn("Local proxy TTS synthesis error", err);
       setError(err.message || "An error occurred while generating speech audio fallback.");
       setLoading(false);
@@ -900,7 +997,7 @@ export default function App() {
           {needsAuth ? (
             <button
               onClick={handleGoogleLogin}
-              className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium text-yellow-400 hover:text-yellow-300 bg-[#111] hover:bg-[#1A1A1A] border border-yellow-900/40 hover:border-yellow-500/30 rounded-md transition-colors cursor-pointer select-text"
+              className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium text-blue-400 hover:text-blue-300 bg-[#111] hover:bg-[#1A1A1A] border border-blue-900/40 hover:border-blue-500/30 rounded-md transition-colors cursor-pointer select-text"
             >
               <svg className="w-3 h-3" viewBox="0 0 48 48">
                 <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
@@ -908,7 +1005,7 @@ export default function App() {
                 <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path>
                 <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
               </svg>
-              <span>Connect Drive</span>
+              <span className="text-blue-400">Connect Drive</span>
             </button>
           ) : (
             <div className="flex items-center gap-2">
@@ -950,7 +1047,7 @@ export default function App() {
             {/* SECTION 1: Engine selector box */}
             <section>
               <div className="flex items-center justify-between mb-2">
-                <h3 className="text-[9px] uppercase tracking-[0.1em] text-[#555] font-bold">
+                <h3 className="text-[9px] uppercase tracking-[0.1em] text-yellow-500 font-bold">
                   Speech Synthesizer Engine
                 </h3>
                 <span className="flex h-1.5 w-1.5 relative">
@@ -960,25 +1057,6 @@ export default function App() {
               </div>
 
               <div className="space-y-1.5">
-                <div
-                  id="engine-gemini"
-                  onClick={() => {
-                    setEngine("gemini");
-                    handleStopSpeech();
-                  }}
-                  className={`flex items-center justify-between p-2 rounded-md cursor-pointer transition-all ${
-                    engine === "gemini"
-                      ? "bg-blue-600/10 border border-blue-500 text-blue-400 font-medium"
-                      : "bg-[#1A1A1A] border border-[#333] text-[#888] hover:border-[#444]"
-                  }`}
-                >
-                  <span className="text-xs flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 shrink-0" />
-                    AI Studio Voices
-                  </span>
-                  {engine === "gemini" && <div className="w-1.5 h-1.5 rounded-full bg-blue-400"></div>}
-                </div>
-
                 <div
                   id="engine-local"
                   onClick={() => {
@@ -997,12 +1075,33 @@ export default function App() {
                   </span>
                   {engine === "local" && <div className="w-1.5 h-1.5 rounded-full bg-blue-400"></div>}
                 </div>
+
+                <div
+                  id="engine-gemini"
+                  onClick={() => {
+                    setEngine("gemini");
+                    handleStopSpeech();
+                  }}
+                  className={`flex items-center justify-between p-2 rounded-md cursor-pointer transition-all ${
+                    engine === "gemini"
+                      ? "bg-blue-600/10 border border-blue-500 text-blue-400 font-medium"
+                      : "bg-[#1A1A1A] border border-[#333] text-[#888] hover:border-[#444]"
+                  }`}
+                >
+                  <span className="text-xs flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                    AI Studio Voices
+                  </span>
+                  {engine === "gemini" && <div className="w-1.5 h-1.5 rounded-full bg-blue-400"></div>}
+                </div>
               </div>
             </section>
 
+            <hr className="border-[#222]" />
+
             {/* SECTION 2: Voice configuration panel */}
             <section>
-              <h3 className="text-[9px] uppercase tracking-[0.1em] text-[#555] font-bold mb-2">
+              <h3 className="text-[9px] uppercase tracking-[0.1em] text-yellow-500 font-bold mb-2">
                 Voice Settings
               </h3>
 
@@ -1011,7 +1110,7 @@ export default function App() {
                 <div className="space-y-3">
                   {/* Language Selector */}
                   <div>
-                    <label className="text-[9px] uppercase tracking-wider text-[#888] block mb-1 font-mono font-medium">Language</label>
+                    <label className="text-[9px] uppercase tracking-wider text-purple-500 block mb-1 font-mono font-medium">Language</label>
                     <select
                       value={language}
                       onChange={(e) => setLanguage(e.target.value as any)}
@@ -1024,7 +1123,7 @@ export default function App() {
 
                   {/* Gemini speaker options */}
                   <div>
-                    <label className="text-[9px] uppercase tracking-wider text-[#888] block mb-1 font-mono font-medium">
+                    <label className="text-[9px] uppercase tracking-wider text-purple-500 block mb-1 font-mono font-medium">
                       {language === "hi" ? "Signature Speaker" : "Signature Accent"}
                     </label>
                     {language === "hi" ? (
@@ -1075,7 +1174,7 @@ export default function App() {
               {engine === "local" && (
                 <div className="space-y-3">
                   <div>
-                    <label className="text-[9px] uppercase tracking-wider text-[#888] block mb-1 font-mono font-medium">Browser Installed Voices</label>
+                    <label className="text-[9px] uppercase tracking-wider text-purple-500 block mb-1 font-mono font-medium">Browser Installed Voices</label>
                     {localVoices.length === 0 ? (
                       <div className="text-[10px] text-[#666] bg-[#1A1A1A] border border-[#333] p-2 rounded-md text-center font-mono">
                         No local voices found.
@@ -1096,7 +1195,7 @@ export default function App() {
                   </div>
 
                   <div>
-                    <label className="text-[9px] uppercase tracking-wider text-[#888] block mb-1 font-mono font-medium">Download Language Accent</label>
+                    <label className="text-[9px] uppercase tracking-wider text-purple-500 block mb-1 font-mono font-medium">Download Language Accent</label>
                     <div className="grid grid-cols-2 gap-1.5">
                       {[
                         { code: "en", label: "English" },
@@ -1120,17 +1219,18 @@ export default function App() {
               )}
             </section>
 
-            {/* Google Drive Integration Panel */}
+            <hr className="border-[#222]" />
+
             {/* Acoustic & Expression Controls Panel */}
-            <section className="border-t border-[#222] pt-3 space-y-4">
-              <h3 className="text-[9px] uppercase tracking-[0.1em] text-[#555] font-bold">
+            <section className="space-y-4">
+              <h3 className="text-[9px] uppercase tracking-[0.1em] text-yellow-500 font-bold">
                 Acoustic & Expression
               </h3>
 
               {/* Vocal Velocity (Speed) Slider */}
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center">
-                  <label className="text-[9px] text-[#888] uppercase tracking-wider font-semibold font-mono">
+                  <label className="text-[9px] text-blue-500 uppercase tracking-wider font-semibold font-mono">
                     Vocal Velocity (Speed)
                   </label>
                   <span className="text-[10px] text-blue-500 font-mono font-bold bg-blue-500/10 px-1.5 py-0.2 rounded">
@@ -1159,7 +1259,7 @@ export default function App() {
               {/* Vocal Pitch Tone Slider */}
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center">
-                  <label className="text-[9px] text-[#888] uppercase tracking-wider font-semibold font-mono">
+                  <label className="text-[9px] text-purple-500 uppercase tracking-wider font-semibold font-mono">
                     Vocal Pitch Tone
                   </label>
                   <span className="text-[10px] text-purple-400 font-mono font-bold bg-purple-500/10 px-1.5 py-0.2 rounded">
@@ -1188,7 +1288,7 @@ export default function App() {
               {/* Audio Gain Volume Slider */}
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center">
-                  <label className="text-[9px] text-[#888] uppercase tracking-wider font-semibold font-mono">
+                  <label className="text-[9px] text-green-500 uppercase tracking-wider font-semibold font-mono">
                     Audio Gain Volume
                   </label>
                   <span className="text-[10px] text-emerald-400 font-mono font-bold bg-emerald-500/10 px-1.5 py-0.2 rounded">
@@ -1203,7 +1303,7 @@ export default function App() {
                     step="0.05"
                     value={audioGain}
                     onChange={(e) => setAudioGain(parseFloat(e.target.value))}
-                    className="w-full h-0.5 bg-[#222] rounded appearance-none cursor-pointer accent-emerald-500"
+                    className="w-full h-0.5 bg-[#222] rounded appearance-none cursor-pointer accent-green-500"
                   />
                   <button
                     onClick={() => setAudioGain(1.0)}
@@ -1214,12 +1314,16 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Voice Tone & Expression Preset Buttons */}
-              <div className="space-y-1.5 pt-1">
-                <label className="text-[9px] text-[#888] uppercase tracking-wider font-semibold font-mono">
-                  Voice Tone & Expression
-                </label>
-                <div className="grid grid-cols-2 gap-1.5">
+            </section>
+
+            <hr className="border-[#222]" />
+
+            {/* SECTION 4: Voice Tone & Expression Preset Buttons */}
+            <section className="space-y-3">
+              <h3 className="text-[9px] uppercase tracking-[0.1em] text-yellow-500 font-bold">
+                Voice Tone & Expression
+              </h3>
+              <div className="grid grid-cols-2 gap-1.5">
                   {[
                     { key: "cheerful", label: "Cheerful" },
                     { key: "formal", label: "Formal" },
@@ -1246,14 +1350,15 @@ export default function App() {
                     );
                   })}
                 </div>
-              </div>
-            </section>
+              </section>
 
             {/* Google Drive Integration Panel (Only when connected) */}
             {!needsAuth && (
-              <section className="border-t border-[#222] pt-3">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-[9px] uppercase tracking-[0.1em] text-[#555] font-bold flex items-center gap-1">
+              <>
+                <hr className="border-[#222]" />
+                <section className="pt-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-[9px] uppercase tracking-[0.1em] text-yellow-500 font-bold flex items-center gap-1">
                     <Cloud className="w-3 h-3 text-blue-500" />
                     Google Drive Cloud
                   </h3>
@@ -1342,7 +1447,8 @@ export default function App() {
                   </div>
                 </div>
               </section>
-            )}
+            </>
+          )}
 
           </div>
         </aside>
@@ -1392,16 +1498,16 @@ export default function App() {
                 <button
                   onClick={handleAddSampleText}
                   className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-medium text-zinc-300 hover:text-blue-400 bg-[#1A1A1A] border border-[#333] hover:border-blue-500/30 rounded-md transition-colors cursor-pointer"
-                  title="Add sample text based on language selection"
+                  title="Add sample script based on language selection"
                 >
                   <FileText className="w-3.5 h-3.5 shrink-0 text-blue-400" />
-                  <span>Add Sample Text</span>
+                  <span>Add Sample Script</span>
                 </button>
 
                 {/* Compact Character Limit box */}
                 <div className="flex items-center gap-2 bg-[#1A1A1A] border border-[#333] px-2.5 py-1 rounded-md">
                   <span className="text-[9px] uppercase tracking-wider font-mono font-semibold text-[#888]">
-                    Limit:
+                    Character Limit:
                   </span>
                   <span className="text-[10px] text-blue-500 font-mono font-bold">
                     {text.length.toLocaleString()}/5,000
@@ -1416,11 +1522,11 @@ export default function App() {
 
                 <button
                   onClick={handleClearText}
-                  className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-medium text-zinc-300 hover:text-rose-400 bg-[#1A1A1A] border border-[#333] hover:border-rose-400/30 rounded-md transition-colors cursor-pointer select-text"
+                  className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-medium text-white hover:text-rose-400 bg-[#1A1A1A] border border-[#333] hover:border-rose-400/30 rounded-md transition-colors cursor-pointer select-text"
                   title="Clear Script"
                 >
-                  <Trash2 className="w-3 h-3 shrink-0" />
-                  <span>Clear Script</span>
+                  <Trash2 className="w-3 h-3 shrink-0 text-purple-500" />
+                  <span className="text-white">Clear Script</span>
                 </button>
               </div>
             </div>
@@ -1433,44 +1539,13 @@ export default function App() {
               placeholder="Type or paste your text here to begin synthesis..."
               id="tts-textarea"
             />
-
-            <div className="absolute bottom-2 right-3.5 text-[9px] text-[#555] font-mono tracking-widest uppercase pointer-events-none select-text">
-              Character Limit: 5000
-            </div>
           </div>
 
 
           {/* Unified Voice Spectrum Visualizer & Controls */}
           <div className="mb-3 bg-[#111] border border-[#222] rounded-xl p-2.5 flex flex-col md:flex-row items-stretch md:items-center gap-3 shrink-0 relative overflow-hidden">
-            {/* Real-time voice spectrum visualizer box */}
-            <div className="flex-1 min-w-0 space-y-1">
-              <div className="flex items-center justify-between text-[9px] text-[#888] uppercase tracking-wider font-mono">
-                <span>Real-Time Voice Spectrum</span>
-                <span className="text-blue-500 font-semibold text-[10px]">{playing ? "active output stream" : "idle"}</span>
-              </div>
-              <div className="w-full bg-[#0F0F0F] rounded-lg p-1 border border-[#222] flex items-center justify-center relative overflow-hidden h-[35px]">
-                <canvas ref={canvasRef} className="w-full h-5" />
-                
-                <AnimatePresence>
-                  {loading && (
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="absolute inset-0 bg-[#0F0F0F]/95 flex items-center justify-center gap-2"
-                    >
-                      <RefreshCw className="w-3 h-3 animate-spin text-blue-500" />
-                      <span className="text-[10px] text-blue-400 font-medium font-mono">
-                        {engine === "gemini" ? "Synthesizing High-Fidelity Neural Speech..." : "Initializing Local Speech Synthesizer..."}
-                      </span>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            </div>
-
-            {/* Actions: Trigger Speech & Download MP3 to the right of the spectrum box */}
-            <div className="flex flex-col gap-2 shrink-0 self-end md:self-center mt-[13px] md:mt-0">
+            {/* Actions: Trigger Speech & Download MP3 in front of the spectrum box */}
+            <div className="flex flex-col gap-2 shrink-0 self-start md:self-center mt-1 md:mt-0">
               <div className="flex items-center gap-2">
                 {/* Trigger Speech Button */}
                 <button
@@ -1563,6 +1638,33 @@ export default function App() {
                   </span>
                 </div>
               )}
+            </div>
+
+            {/* Real-time voice spectrum visualizer box */}
+            <div className="flex-1 min-w-0 space-y-1">
+              <div className="flex items-center justify-between text-[9px] uppercase tracking-wider font-mono">
+                <span className="text-yellow-500">Real Time Voice Spectrum</span>
+                <span className="text-blue-500 font-semibold text-[10px]">{playing ? "active output stream" : "idle"}</span>
+              </div>
+              <div className="w-full bg-[#0F0F0F] rounded-lg p-1 border border-[#222] flex items-center justify-center relative overflow-hidden h-[35px]">
+                <canvas ref={canvasRef} className="w-full h-[35px]" />
+                
+                <AnimatePresence>
+                  {loading && (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="absolute inset-0 bg-[#0F0F0F]/95 flex items-center justify-center gap-2"
+                    >
+                      <RefreshCw className="w-3 h-3 animate-spin text-blue-500" />
+                      <span className="text-[10px] text-blue-400 font-medium font-mono">
+                        {engine === "gemini" ? "Synthesizing High-Fidelity Neural Speech..." : "Initializing Local Speech Synthesizer..."}
+                      </span>
+                    </motion.div>
+                  )}
+                </  AnimatePresence>
+              </div>
             </div>
           </div>
 
