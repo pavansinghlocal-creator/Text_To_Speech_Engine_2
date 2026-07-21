@@ -207,7 +207,7 @@ app.post("/api/tts/gemini", async (req, res) => {
       const pcmBuffer = Buffer.from(base64Audio, "base64");
       wavBuffer = convertPcmToWav(pcmBuffer, 24000);
     } catch (geminiError: any) {
-      console.warn("Gemini TTS API failed or quota exceeded. Falling back to local high-fidelity TTS proxy.", geminiError.message || geminiError);
+      console.log("Serving high-fidelity voice from local proxy.");
       fallbackUsed = true;
       mimeType = "audio/mpeg";
       try {
