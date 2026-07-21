@@ -278,6 +278,7 @@ export default function App() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [audioCurrentTime, setAudioCurrentTime] = useState<number>(0);
   const [audioDuration, setAudioDuration] = useState<number>(0);
+  const [isLocalSpeechPaused, setIsLocalSpeechPaused] = useState<boolean>(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const animationRef = useRef<number | null>(null);
@@ -346,14 +347,45 @@ export default function App() {
     }
   }, [audioGain]);
 
+  // Reset audio URL when text or parameters change to prevent downloading/playing stale audio
+  useEffect(() => {
+    setAudioUrl((prev) => {
+      if (prev && prev !== "local-browser-speech") {
+        URL.revokeObjectURL(prev);
+      }
+      return null;
+    });
+  }, [text, language, tone, geminiVoice, engine, vocalVelocity, vocalPitch]);
+
   // Clean up Audio URLs
   useEffect(() => {
     return () => {
-      if (audioUrl) {
+      if (audioUrl && audioUrl !== "local-browser-speech") {
         URL.revokeObjectURL(audioUrl);
       }
     };
   }, [audioUrl]);
+
+  // Handle local browser voice progress simulation
+  useEffect(() => {
+    let interval: any = null;
+    if (playing && audioUrl === "local-browser-speech") {
+      interval = setInterval(() => {
+        setAudioCurrentTime((prev) => {
+          const next = prev + 0.05;
+          if (next >= audioDuration) {
+            setPlaying(false);
+            clearInterval(interval);
+            return audioDuration;
+          }
+          return next;
+        });
+      }, 50);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [playing, audioUrl, audioDuration]);
 
   // Sound Wave Visualizer Animation
   useEffect(() => {
@@ -664,6 +696,7 @@ export default function App() {
   const handleStopSpeech = () => {
     synthesisIdRef.current += 1; // Invalidate any running synthesis
     if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.resume();
       window.speechSynthesis.cancel();
     }
     if (audioRef.current) {
@@ -671,6 +704,9 @@ export default function App() {
       audioRef.current.currentTime = 0;
     }
     setPlaying(false);
+    setAudioCurrentTime(0);
+    setAudioUrl(null);
+    setIsLocalSpeechPaused(false);
   };
 
   // 1. Speak Via Gemini AI Studio (Server API Endpoint)
@@ -680,6 +716,7 @@ export default function App() {
 
     setLoading(true);
     setAudioUrl(null);
+    setIsLocalSpeechPaused(false);
     try {
       const res = await fetch("/api/tts/gemini", {
         method: "POST",
@@ -753,59 +790,10 @@ export default function App() {
     }
   };
 
-  // 2. Speak Via Local Browser Engine (utilizing native Web Speech API with high fidelity server fallback)
+  // 2. Speak Via Local Browser Engine (utilizing high fidelity server proxy to match the Download MP3 voice perfectly)
   const speakViaBrowser = async () => {
-    if (typeof window !== "undefined" && window.speechSynthesis) {
-      try {
-        window.speechSynthesis.cancel();
-
-        synthesisIdRef.current += 1;
-        const currentId = synthesisIdRef.current;
-        
-        const utterance = new SpeechSynthesisUtterance(text);
-        
-        // Find selected voice
-        if (localVoiceName) {
-          const selectedVoice = localVoices.find(v => v.name === localVoiceName);
-          if (selectedVoice) {
-            utterance.voice = selectedVoice;
-          }
-        }
-        
-        utterance.rate = vocalVelocity; // Rate 0.1 to 10
-        utterance.pitch = vocalPitch;   // Pitch 0 to 2
-        utterance.volume = Math.max(0, Math.min(1, audioGain)); // Volume 0 to 1
-        
-        utterance.onstart = () => {
-          if (currentId !== synthesisIdRef.current) return;
-          setPlaying(true);
-          setError(null);
-        };
-        utterance.onend = () => {
-          if (currentId !== synthesisIdRef.current) return;
-          setPlaying(false);
-        };
-        utterance.onerror = (e) => {
-          if (currentId !== synthesisIdRef.current) return;
-          // If native synthesis is cancelled/interrupted, do not trigger server fallback
-          if (e.error === "interrupted" || e.error === "canceled") {
-            setPlaying(false);
-            return;
-          }
-          console.warn("SpeechSynthesis error, falling back to local proxy", e);
-          speakViaLocalProxy(currentId);
-        };
-
-        window.speechSynthesis.speak(utterance);
-      } catch (err) {
-        console.warn("Failed to initiate native SpeechSynthesis, falling back to server local proxy", err);
-        synthesisIdRef.current += 1;
-        await speakViaLocalProxy(synthesisIdRef.current);
-      }
-    } else {
-      synthesisIdRef.current += 1;
-      await speakViaLocalProxy(synthesisIdRef.current);
-    }
+    synthesisIdRef.current += 1;
+    await speakViaLocalProxy(synthesisIdRef.current);
   };
 
   // 2b. Fallback: Speak via server local TTS proxy if browser synthesis fails
@@ -817,6 +805,7 @@ export default function App() {
 
     setLoading(true);
     setError(null);
+    setIsLocalSpeechPaused(false);
     try {
       const res = await fetch("/api/tts/local", {
         method: "POST",
@@ -927,33 +916,43 @@ export default function App() {
         document.body.removeChild(a);
         setSuccessMsg("MP3 exported successfully!");
       } else {
-        // Fallback or explicit request: download browser local TTS as MP3 from server proxy
-        const res = await fetch("/api/tts/local", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            text,
-            language: language === "hi" ? "hi" : "en"
-          })
-        });
+        let currentAudioUrl = audioUrl;
+        if (!currentAudioUrl || currentAudioUrl === "local-browser-speech") {
+          // Generate speech on-the-fly for download since it hasn't been generated yet
+          const res = await fetch("/api/tts/local", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              text,
+              language: language === "hi" ? "hi" : "en",
+              tone
+            })
+          });
 
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.error || "Failed to export audio from server.");
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || "Failed to export audio from server.");
+          }
+
+          const blob = await res.blob();
+          currentAudioUrl = URL.createObjectURL(blob);
+          setAudioUrl(currentAudioUrl);
+
+          if (audioRef.current) {
+            audioRef.current.src = currentAudioUrl;
+            audioRef.current.playbackRate = vocalVelocity;
+            audioRef.current.volume = Math.max(0, Math.min(1, audioGain));
+          }
         }
 
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        
         const a = document.createElement("a");
-        a.href = url;
+        a.href = currentAudioUrl;
         a.download = `local-speech-${Date.now()}.mp3`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        URL.revokeObjectURL(url);
         setSuccessMsg("MP3 file downloaded successfully!");
       }
     } catch (err: any) {
@@ -1596,11 +1595,30 @@ export default function App() {
                   {/* Play / Pause button */}
                   <button
                     onClick={() => {
-                      if (audioRef.current) {
-                        if (playing) {
-                          audioRef.current.pause();
-                        } else {
-                          audioRef.current.play().catch(console.warn);
+                      if (audioUrl === "local-browser-speech") {
+                        if (typeof window !== "undefined" && window.speechSynthesis) {
+                          if (playing) {
+                            window.speechSynthesis.pause();
+                            setPlaying(false);
+                            setIsLocalSpeechPaused(true);
+                          } else {
+                            if (isLocalSpeechPaused) {
+                              window.speechSynthesis.resume();
+                              setPlaying(true);
+                              setIsLocalSpeechPaused(false);
+                            } else {
+                              // Re-trigger speech synthesis from the beginning
+                              speakViaBrowser();
+                            }
+                          }
+                        }
+                      } else {
+                        if (audioRef.current) {
+                          if (playing) {
+                            audioRef.current.pause();
+                          } else {
+                            audioRef.current.play().catch(console.warn);
+                          }
                         }
                       }
                     }}
@@ -1624,8 +1642,54 @@ export default function App() {
                     onChange={(e) => {
                       const val = parseFloat(e.target.value);
                       setAudioCurrentTime(val);
-                      if (audioRef.current) {
-                        audioRef.current.currentTime = val;
+                      if (audioUrl === "local-browser-speech") {
+                        if (typeof window !== "undefined" && window.speechSynthesis) {
+                          window.speechSynthesis.resume();
+                          window.speechSynthesis.cancel();
+                          setIsLocalSpeechPaused(false);
+
+                          synthesisIdRef.current += 1;
+                          const currentId = synthesisIdRef.current;
+                          const progress = val / audioDuration;
+                          const startChar = Math.floor(progress * text.length);
+                          const remainingText = text.substring(startChar);
+                          
+                          if (remainingText.trim()) {
+                            const utterance = new SpeechSynthesisUtterance(remainingText);
+                            if (localVoiceName) {
+                              const selectedVoice = localVoices.find(v => v.name === localVoiceName);
+                              if (selectedVoice) {
+                                utterance.voice = selectedVoice;
+                              }
+                            }
+                            utterance.rate = vocalVelocity;
+                            utterance.pitch = vocalPitch;
+                            utterance.volume = Math.max(0, Math.min(1, audioGain));
+                            
+                            utterance.onstart = () => {
+                              if (currentId !== synthesisIdRef.current) return;
+                              setPlaying(true);
+                              setIsLocalSpeechPaused(false);
+                            };
+                            utterance.onend = () => {
+                              if (currentId !== synthesisIdRef.current) return;
+                              setPlaying(false);
+                              setAudioCurrentTime(audioDuration);
+                              setIsLocalSpeechPaused(false);
+                            };
+                            utterance.onerror = () => {
+                              if (currentId !== synthesisIdRef.current) return;
+                              setPlaying(false);
+                              setIsLocalSpeechPaused(false);
+                            };
+                            
+                            window.speechSynthesis.speak(utterance);
+                          }
+                        }
+                      } else {
+                        if (audioRef.current) {
+                          audioRef.current.currentTime = val;
+                        }
                       }
                     }}
                     className="flex-1 h-1 bg-[#333] rounded appearance-none cursor-pointer accent-blue-500"
