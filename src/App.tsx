@@ -17,9 +17,9 @@ import {
   HelpCircle,
   Laptop,
   AlertCircle,
+  FileText,
   Cloud,
   LogOut,
-  FileText,
   UploadCloud
 } from "lucide-react";
 import {
@@ -112,12 +112,6 @@ export default function App() {
   const [driveFiles, setDriveFiles] = useState<DriveFile[]>([]);
   const [loadingDrive, setLoadingDrive] = useState<boolean>(false);
   const [savingToDrive, setSavingToDrive] = useState<boolean>(false);
-
-  // Audio References
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const animationRef = useRef<number | null>(null);
 
   // Initialize Firebase Auth / Google OAuth state
   useEffect(() => {
@@ -247,6 +241,12 @@ export default function App() {
       setLoadingDrive(false);
     }
   };
+
+  // Audio References
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const animationRef = useRef<number | null>(null);
 
   // Get browser local voices
   useEffect(() => {
@@ -748,7 +748,7 @@ export default function App() {
                 <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path>
                 <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
               </svg>
-              <span>Google Drive</span>
+              <span>Connect Drive</span>
             </button>
           ) : (
             <div className="flex items-center gap-2">
@@ -1044,7 +1044,7 @@ export default function App() {
                       </button>
                     </div>
 
-                    <div className="max-h-[110px] overflow-y-auto border border-[#222] rounded bg-[#0A0A0A] divide-y divide-[#1A1A1A] custom-scrollbar">
+                    <div className="max-h-[110px] overflow-y-auto border border-[#222] rounded bg-[#0A0A0A] divide-y divide-[#1A1A1A] custom-scrollbar font-sans">
                       {loadingDrive && driveFiles.length === 0 ? (
                         <div className="p-3 text-center">
                           <RefreshCw className="w-3.5 h-3.5 animate-spin mx-auto text-blue-500" />
@@ -1078,6 +1078,7 @@ export default function App() {
                 </div>
               )}
             </section>
+
           </div>
 
           {/* Character counter / capacity section */}

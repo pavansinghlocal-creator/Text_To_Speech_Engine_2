@@ -75,7 +75,7 @@ export interface DriveFile {
 // List text files and Google Docs from Google Drive
 export const listDriveFiles = async (accessToken: string): Promise<DriveFile[]> => {
   const query = encodeURIComponent(
-    "mimeType = 'text/plain' or mimeType = 'application/vnd.google-apps.document' or name md 'VoxStudio'"
+    "(mimeType = 'text/plain' or mimeType = 'application/vnd.google-apps.document') and trashed = false"
   );
   const url = `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name,mimeType,modifiedTime,size)&orderBy=modifiedTime desc&pageSize=30`;
 
